@@ -212,7 +212,11 @@ class AmoClient:
         if cf:
             body["custom_fields_values"] = cf
         if tags:
-            body["_embedded"] = {"tags": [{"name": t} for t in tags]}
+            # ТОЛЬКО tags_to_add. `_embedded.tags` в PATCH ЗАМЕНЯЕТ весь список
+            # тегов сделки: теги, поставленные при создании (voronka, form:...),
+            # молча исчезают. Поймано на живом аккаунте — в ленте сделки видно
+            # «Теги убраны: form:landing». См. docs/pitfalls.md, п. 14.
+            body["tags_to_add"] = [{"name": t} for t in tags]
         if not body:
             return None
         return await self._request("PATCH", f"/api/v4/leads/{lead_id}", json_body=body)

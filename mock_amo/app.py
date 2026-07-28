@@ -190,9 +190,21 @@ async def patch_lead(lead_id: int, body: dict = Body(...), authorization: str | 
         existing = [c for c in lead["custom_fields_values"] if c.get("field_id") != cf.get("field_id")]
         existing.append(cf)
         lead["custom_fields_values"] = existing
-    for tag in (body.get("_embedded") or {}).get("tags") or []:
+    # Поведение боевого amoCRM, проверено на живом аккаунте:
+    #   _embedded.tags  — ЗАМЕНЯЕТ весь список тегов сделки;
+    #   tags_to_add     — дополняет;
+    #   tags_to_delete  — убирает точечно.
+    # Мок повторяет это специально, чтобы регрессия ловилась тестом, а не
+    # обнаруживалась в ленте боевой сделки.
+    embedded_tags = (body.get("_embedded") or {}).get("tags")
+    if embedded_tags is not None:
+        lead["tags"] = [t["name"] for t in embedded_tags if t.get("name")]
+    for tag in body.get("tags_to_add") or []:
         if tag.get("name") and tag["name"] not in lead["tags"]:
             lead["tags"].append(tag["name"])
+    for tag in body.get("tags_to_delete") or []:
+        if tag.get("name") in lead["tags"]:
+            lead["tags"].remove(tag["name"])
     lead["updated_at"] = int(time.time())
     return {"id": lead_id, "updated_at": lead["updated_at"]}
 

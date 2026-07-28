@@ -126,6 +126,10 @@ async def test_bot_result_updates_the_same_deal(store: Store, worker: Worker, mo
     deal = next(iter(mock_reset.state.leads.values()))
     assert deal["status_id"] == 143, "статус переведён на «квалифицирован»"
     assert "hot" in deal["tags"]
+    # Регрессия: PATCH с _embedded.tags затирает теги, поставленные при создании.
+    # Поймано на живом amoCRM, лечится tags_to_add. См. docs/pitfalls.md, п. 14.
+    assert "voronka" in deal["tags"], "теги от создания сделки не должны затираться"
+    assert "form:landing" in deal["tags"], "теги от создания сделки не должны затираться"
     values = {
         cf["field_id"]: cf["values"][0]["value"] for cf in deal["custom_fields_values"]
     }
