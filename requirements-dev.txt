@@ -1,0 +1,5 @@
+# Нужно только для пересъёмки скриншотов (bench/make_screenshots.py).
+# Браузеры Playwright скачивать не нужно: используется системный Chrome
+# через channel="chrome".
+-r requirements.txt
+playwright==1.49.1

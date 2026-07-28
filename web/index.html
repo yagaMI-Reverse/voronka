@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voronka — заявка с сайта доезжает до CRM</title>
+<meta name="description" content="Сквозной конвейер: форма на сайте → amoCRM → Telegram-бот → обратно в amoCRM. С идемпотентностью, журналом событий и ретраями.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#0F172A; --navy-2:#1E293B; --slate:#334155; --slate-2:#475569;
+  --accent:#0369A1; --accent-hover:#075985; --accent-soft:#E0F2FE;
+  --bg:#F8FAFC; --fg:#020617; --muted:#E8ECF1; --border:#E2E8F0;
+  --danger:#DC2626; --danger-soft:#FEF2F2; --ok:#047857; --ok-soft:#ECFDF5;
+  --warn:#B45309; --warn-soft:#FFFBEB;
+  --radius:12px; --radius-lg:18px;
+  --shadow-1:0 1px 2px rgba(2,6,23,.06), 0 1px 3px rgba(2,6,23,.1);
+  --shadow-2:0 4px 6px -1px rgba(2,6,23,.08), 0 10px 20px -6px rgba(2,6,23,.12);
+  --shadow-3:0 20px 45px -18px rgba(2,6,23,.45);
+  --font:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  --mono:'SFMono-Regular',ui-monospace,Consolas,'Liberation Mono',monospace;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; font-family:var(--font); background:var(--bg); color:var(--fg);
+  font-size:16px; line-height:1.6; font-feature-settings:"tnum" 0;
+}
+.wrap{width:100%; max-width:1120px; margin:0 auto; padding:0 24px}
+a{color:var(--accent)}
+h1,h2,h3{line-height:1.2; margin:0; letter-spacing:-.02em}
+p{margin:0}
+.num{font-variant-numeric:tabular-nums}
+
+/* ---------- header ---------- */
+.top{position:sticky; top:0; z-index:40; background:rgba(15,23,42,.92); backdrop-filter:blur(8px); border-bottom:1px solid rgba(255,255,255,.08)}
+.top .wrap{display:flex; align-items:center; justify-content:space-between; height:64px; gap:16px}
+.brand{display:flex; align-items:center; gap:10px; color:#fff; font-weight:700; letter-spacing:-.01em}
+.brand svg{flex:none}
+.top nav{display:flex; gap:4px; align-items:center}
+.top nav a{
+  color:#CBD5E1; text-decoration:none; font-size:.9375rem; font-weight:500;
+  padding:8px 12px; border-radius:8px; transition:background .18s ease, color .18s ease;
+}
+.top nav a:hover{background:rgba(255,255,255,.08); color:#fff}
+.top nav a:focus-visible{outline:2px solid #7DD3FC; outline-offset:2px}
+@media (max-width:720px){ .top nav a.hide-sm{display:none} }
+
+/* ---------- hero ---------- */
+.hero{background:linear-gradient(180deg,#0F172A 0%,#152238 62%,#1B2B45 100%); color:#fff; padding:72px 0 96px; position:relative; overflow:hidden}
+.hero::after{
+  content:""; position:absolute; inset:auto -10% -60% 55%; height:420px;
+  background:radial-gradient(closest-side, rgba(3,105,161,.35), transparent 70%); pointer-events:none;
+}
+.hero .wrap{position:relative; z-index:1}
+.eyebrow{
+  display:inline-flex; align-items:center; gap:8px; font-size:.8125rem; font-weight:600;
+  letter-spacing:.04em; text-transform:uppercase; color:#7DD3FC;
+  background:rgba(3,105,161,.22); border:1px solid rgba(125,211,252,.28);
+  padding:6px 12px; border-radius:999px;
+}
+.hero h1{font-size:clamp(2rem,4.6vw,3.25rem); font-weight:700; margin:20px 0 0; max-width:18ch}
+.hero .lede{margin-top:20px; max-width:62ch; color:#CBD5E1; font-size:1.0625rem}
+.hero .lede strong{color:#fff; font-weight:600}
+.cta-row{display:flex; flex-wrap:wrap; gap:12px; margin-top:32px}
+
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  min-height:48px; padding:0 22px; border-radius:var(--radius); border:1px solid transparent;
+  font:inherit; font-weight:600; font-size:1rem; cursor:pointer; text-decoration:none;
+  transition:background .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease;
+}
+.btn:focus-visible{outline:3px solid #7DD3FC; outline-offset:2px}
+.btn-primary{background:var(--accent); color:#fff; box-shadow:var(--shadow-2)}
+.btn-primary:hover{background:var(--accent-hover)}
+.btn-ghost{background:transparent; color:#E2E8F0; border-color:rgba(226,232,240,.3)}
+.btn-ghost:hover{background:rgba(255,255,255,.08); color:#fff}
+.btn-secondary{background:#fff; color:var(--navy); border-color:var(--border)}
+.btn-secondary:hover{background:var(--muted)}
+.btn[disabled]{opacity:.5; cursor:not-allowed}
+
+/* ---------- metrics ---------- */
+.metrics{display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-top:56px}
+@media (max-width:900px){ .metrics{grid-template-columns:repeat(2,1fr)} }
+@media (max-width:460px){ .metrics{grid-template-columns:1fr} }
+.metric{background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); border-radius:var(--radius-lg); padding:20px}
+.metric .v{font-size:2rem; font-weight:700; color:#fff; font-variant-numeric:tabular-nums; line-height:1.1}
+.metric .k{margin-top:6px; font-size:.875rem; color:#CBD5E1}
+.metric .s{margin-top:10px; font-size:.8125rem; color:#94A3B8}
+
+/* ---------- sections ---------- */
+section{padding:80px 0}
+.section-head{max-width:64ch}
+.section-head h2{font-size:clamp(1.5rem,2.8vw,2rem); font-weight:700}
+.section-head p{margin-top:14px; color:var(--slate)}
+.kicker{font-size:.8125rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--accent)}
+
+.flow{margin-top:40px; background:#fff; border:1px solid var(--border); border-radius:var(--radius-lg); padding:28px; box-shadow:var(--shadow-1); overflow-x:auto}
+.flow svg{display:block; min-width:760px; width:100%; height:auto}
+
+.cards{display:grid; grid-template-columns:repeat(3,1fr); gap:20px; margin-top:40px}
+@media (max-width:900px){ .cards{grid-template-columns:1fr} }
+.card{background:#fff; border:1px solid var(--border); border-radius:var(--radius-lg); padding:26px; box-shadow:var(--shadow-1)}
+.card .ico{width:40px; height:40px; border-radius:10px; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center}
+.card h3{margin-top:16px; font-size:1.0625rem; font-weight:600}
+.card p{margin-top:10px; color:var(--slate); font-size:.9375rem}
+.card .proof{margin-top:16px; padding-top:14px; border-top:1px dashed var(--border); font-size:.8125rem; color:var(--slate-2)}
+.card .proof b{color:var(--fg); font-variant-numeric:tabular-nums}
+
+.band{background:var(--navy); color:#fff}
+.band .section-head p{color:#94A3B8}
+.band .kicker{color:#7DD3FC}
+
+/* ---------- form ---------- */
+.form-grid{display:grid; grid-template-columns:1.05fr .95fr; gap:40px; align-items:start; margin-top:40px}
+@media (max-width:940px){ .form-grid{grid-template-columns:1fr} }
+.form-card{background:#fff; border:1px solid var(--border); border-radius:var(--radius-lg); padding:28px; box-shadow:var(--shadow-3)}
+.field{margin-bottom:18px}
+.field label{display:block; font-size:.875rem; font-weight:600; color:var(--navy-2); margin-bottom:7px}
+.field .req{color:var(--danger)}
+.field input,.field textarea{
+  width:100%; min-height:48px; padding:12px 14px; font:inherit; font-size:1rem; color:var(--fg);
+  background:#fff; border:1px solid #CBD5E1; border-radius:var(--radius);
+  transition:border-color .18s ease, box-shadow .18s ease;
+}
+.field textarea{min-height:96px; resize:vertical}
+.field input:hover,.field textarea:hover{border-color:#94A3B8}
+.field input:focus,.field textarea:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(3,105,161,.18)}
+.field input[aria-invalid="true"]{border-color:var(--danger); background:var(--danger-soft)}
+.hint{margin-top:6px; font-size:.8125rem; color:var(--slate-2)}
+.err{display:none; margin-top:6px; font-size:.8125rem; color:var(--danger); font-weight:500}
+.err.show{display:flex; gap:6px; align-items:flex-start}
+.row-2{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+@media (max-width:520px){ .row-2{grid-template-columns:1fr} }
+
+.result{margin-top:20px; border-radius:var(--radius); padding:16px 18px; border:1px solid var(--border); background:var(--muted); display:none}
+.result.show{display:block}
+.result.ok{background:var(--ok-soft); border-color:#A7F3D0}
+.result.dup{background:var(--warn-soft); border-color:#FDE68A}
+.result.bad{background:var(--danger-soft); border-color:#FECACA}
+.result .t{display:flex; align-items:center; gap:9px; font-weight:700; font-size:.9375rem}
+.result.ok .t{color:var(--ok)} .result.dup .t{color:var(--warn)} .result.bad .t{color:var(--danger)}
+.result .d{margin-top:8px; font-size:.875rem; color:var(--slate)}
+.result pre{
+  margin:12px 0 0; padding:12px; background:rgba(2,6,23,.05); border-radius:8px;
+  font-family:var(--mono); font-size:.75rem; line-height:1.6; overflow-x:auto; color:var(--navy);
+}
+.result .after{margin-top:14px; display:flex; flex-wrap:wrap; gap:10px}
+
+.aside h3{font-size:1.0625rem; font-weight:600}
+.aside ol{margin:16px 0 0; padding-left:0; list-style:none; counter-reset:step}
+.aside ol li{counter-increment:step; position:relative; padding:0 0 20px 42px; color:var(--slate); font-size:.9375rem}
+.aside ol li::before{
+  content:counter(step); position:absolute; left:0; top:-1px; width:28px; height:28px; border-radius:50%;
+  background:var(--navy); color:#fff; font-size:.8125rem; font-weight:700;
+  display:flex; align-items:center; justify-content:center;
+}
+.aside ol li b{color:var(--fg); font-weight:600}
+.note{margin-top:8px; background:#fff; border:1px solid var(--border); border-left:3px solid var(--accent); border-radius:0 var(--radius) var(--radius) 0; padding:16px 18px; font-size:.875rem; color:var(--slate)}
+
+footer{background:var(--navy); color:#94A3B8; padding:36px 0; font-size:.875rem}
+footer .wrap{display:flex; flex-wrap:wrap; gap:16px; justify-content:space-between; align-items:center}
+footer a{color:#7DD3FC}
+
+@media (prefers-reduced-motion:reduce){ *{animation:none !important; transition:none !important; scroll-behavior:auto !important} }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <span class="brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M3 5h18l-6.5 8v6l-5 2v-8L3 5z" stroke="#7DD3FC" stroke-width="1.8" stroke-linejoin="round"/>
+      </svg>
+      Voronka
+    </span>
+    <nav>
+      <a href="#flow" class="hide-sm">Как устроено</a>
+      <a href="#reliability" class="hide-sm">Надёжность</a>
+      <a href="/journal">Журнал событий</a>
+      <a href="#form">Оставить заявку</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<section class="hero">
+  <div class="wrap">
+    <span class="eyebrow">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      демо-стенд конвейера
+    </span>
+    <h1>Заявка с сайта доезжает до CRM. Каждая. Ровно один раз.</h1>
+    <p class="lede">
+      Форма на сайте → сделка и контакт в <strong>amoCRM</strong> → квалификация в <strong>Telegram-боте на BotHelp</strong> →
+      результат диалога обратно в карточку сделки. Между конструкторами стоит слой надёжности:
+      идемпотентность по натуральному ключу, append-only журнал, ретраи с экспоненциальным backoff и очередь ошибок.
+    </p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#form">
+        Отправить тестовую заявку
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+      <a class="btn btn-ghost" href="/journal">Открыть журнал событий</a>
+    </div>
+
+    <div class="metrics">
+      <div class="metric">
+        <div class="v num">0</div>
+        <div class="k">лишних сделок в CRM</div>
+        <div class="s">200 отправок, 60 из них — дубли</div>
+      </div>
+      <div class="metric">
+        <div class="v num">0</div>
+        <div class="k">потерянных заявок</div>
+        <div class="s">при 15-секундном отказе CRM</div>
+      </div>
+      <div class="metric">
+        <div class="v num">78 мс</div>
+        <div class="k">форма → карточка, p50</div>
+        <div class="s">одиночная заявка, локальный стенд</div>
+      </div>
+      <div class="metric">
+        <div class="v num">1</div>
+        <div class="k">сделка из 20 одновременных</div>
+        <div class="s">параллельные одинаковые отправки</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="flow">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Схема потока</span>
+      <h2>Четыре системы, один сквозной путь заявки</h2>
+      <p>
+        Приём и доставка разнесены намеренно: HTTP-обработчик не ходит в amoCRM, он пишет событие в журнал
+        и очередь и отвечает 202. Поэтому недоступность CRM не превращается в потерянную заявку.
+      </p>
+    </div>
+
+    <div class="flow">
+      <svg viewBox="0 0 900 240" role="img" aria-label="Схема: форма на сайте передаёт заявку в слой надёжности; тот создаёт сделку в amoCRM; BotHelp ведёт диалог в Telegram и возвращает результат обратно в слой надёжности, который обновляет сделку.">
+        <defs>
+          <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+            <path d="M0 0 L9 4.5 L0 9 z" fill="#0369A1"/>
+          </marker>
+          <marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+            <path d="M0 0 L9 4.5 L0 9 z" fill="#64748B"/>
+          </marker>
+        </defs>
+
+        <g font-family="Plus Jakarta Sans, sans-serif">
+          <rect x="8" y="70" width="150" height="72" rx="12" fill="#F1F5F9" stroke="#CBD5E1"/>
+          <text x="83" y="100" text-anchor="middle" font-size="14" font-weight="700" fill="#0F172A">Форма на сайте</text>
+          <text x="83" y="120" text-anchor="middle" font-size="11.5" fill="#475569">POST /webhook/form</text>
+
+          <rect x="238" y="46" width="190" height="120" rx="14" fill="#0F172A"/>
+          <text x="333" y="76" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">Слой надёжности</text>
+          <text x="333" y="98" text-anchor="middle" font-size="11.5" fill="#7DD3FC">идемпотентность · журнал</text>
+          <text x="333" y="116" text-anchor="middle" font-size="11.5" fill="#7DD3FC">очередь · backoff · DLQ</text>
+          <text x="333" y="140" text-anchor="middle" font-size="11" fill="#94A3B8">Python / FastAPI</text>
+
+          <rect x="512" y="16" width="170" height="76" rx="12" fill="#E0F2FE" stroke="#7DD3FC"/>
+          <text x="597" y="46" text-anchor="middle" font-size="14" font-weight="700" fill="#0C4A6E">amoCRM</text>
+          <text x="597" y="66" text-anchor="middle" font-size="11.5" fill="#075985">сделка · контакт · поля</text>
+
+          <rect x="512" y="130" width="170" height="76" rx="12" fill="#F1F5F9" stroke="#CBD5E1"/>
+          <text x="597" y="160" text-anchor="middle" font-size="14" font-weight="700" fill="#0F172A">BotHelp</text>
+          <text x="597" y="180" text-anchor="middle" font-size="11.5" fill="#475569">автоворонка в Telegram</text>
+
+          <rect x="742" y="130" width="150" height="76" rx="12" fill="#F1F5F9" stroke="#CBD5E1"/>
+          <text x="817" y="160" text-anchor="middle" font-size="14" font-weight="700" fill="#0F172A">Клиент</text>
+          <text x="817" y="180" text-anchor="middle" font-size="11.5" fill="#475569">диалог, напоминания</text>
+
+          <path d="M158 106 H232" stroke="#0369A1" stroke-width="2" marker-end="url(#ar)"/>
+          <path d="M428 90 H506" stroke="#0369A1" stroke-width="2" marker-end="url(#ar)"/>
+          <text x="466" y="80" text-anchor="middle" font-size="10.5" fill="#0369A1" font-weight="600">создать сделку</text>
+
+          <path d="M428 130 H506" stroke="#0369A1" stroke-width="2" marker-end="url(#ar)"/>
+          <text x="466" y="122" text-anchor="middle" font-size="10.5" fill="#0369A1" font-weight="600">запустить бота</text>
+
+          <path d="M682 168 H736" stroke="#64748B" stroke-width="2" marker-end="url(#ar2)"/>
+          <path d="M597 206 V222 H333 V172" stroke="#64748B" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#ar2)"/>
+          <text x="470" y="236" text-anchor="middle" font-size="10.5" fill="#475569" font-weight="600">итог диалога → обновление сделки и статуса</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section id="reliability" class="band">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Слой надёжности</span>
+      <h2>Три механизма, каждый с измеренным результатом</h2>
+      <p>
+        Цифры ниже получены на локальном стенде против мока amoCRM, скрипт прогона лежит в репозитории.
+        Против боевого аккаунта amoCRM латентность не измерялась.
+      </p>
+    </div>
+    <div class="cards">
+      <article class="card">
+        <span class="ico" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 3l7.5 3.5v5c0 4.6-3.2 8.5-7.5 9.5-4.3-1-7.5-4.9-7.5-9.5v-5L12 3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+        </span>
+        <h3>Идемпотентность по натуральному ключу</h3>
+        <p>
+          Ключ считается по нормализованному телефону или e-mail, а не по идентификатору доставки.
+          <code>+7 707…</code> и <code>8 707…</code> — один человек, а не два лида.
+        </p>
+        <p class="proof">200 отправок, 60 дублей → <b>140</b> сделок, лишних <b>0</b></p>
+      </article>
+      <article class="card">
+        <span class="ico" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </span>
+        <h3>Append-only журнал событий</h3>
+        <p>
+          Каждое событие — принято, дубль, доставлено, ретрай, DLQ — пишется строкой и никогда не правится:
+          UPDATE и DELETE запрещены триггерами в самой базе, а не договорённостью в коде.
+        </p>
+        <p class="proof">разбор инцидента — <b>по trace_id</b>, без «а что там было вчера»</p>
+      </article>
+      <article class="card">
+        <span class="ico" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 12a9 9 0 1 0 3-6.7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3 4v5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <h3>Ретраи с backoff и очередь ошибок</h3>
+        <p>
+          5xx, 429 и таймауты повторяются с экспоненциальной задержкой и джиттером; 400 и 404 повторять
+          бессмысленно — они уходят в DLQ сразу. Что исчерпало бюджет попыток, разбирается вручную.
+        </p>
+        <p class="proof">CRM лежала 15 с → потеряно <b>0</b> из 25 заявок</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="form">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Живая проверка</span>
+      <h2>Отправьте заявку и посмотрите, что произошло</h2>
+      <p>
+        Форма шлёт настоящий запрос в конвейер. После отправки можно нажать «отправить ещё раз»
+        и увидеть, как повтор отсекается как дубль — сделка в CRM останется одна.
+      </p>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-card">
+        <form id="leadForm" novalidate>
+          <div class="field">
+            <label for="name">Имя</label>
+            <input id="name" name="name" type="text" autocomplete="name" placeholder="Илья">
+          </div>
+
+          <div class="row-2">
+            <div class="field">
+              <label for="phone">Телефон <span class="req" aria-hidden="true">*</span></label>
+              <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel"
+                     placeholder="+7 707 123 45 67" aria-describedby="contactHint phoneErr">
+              <p class="err" id="phoneErr" role="alert"></p>
+            </div>
+            <div class="field">
+              <label for="email">E-mail</label>
+              <input id="email" name="email" type="email" inputmode="email" autocomplete="email"
+                     placeholder="you@company.kz" aria-describedby="contactHint emailErr">
+              <p class="err" id="emailErr" role="alert"></p>
+            </div>
+          </div>
+          <p class="hint" id="contactHint">Нужен хотя бы один контакт: по нему считается ключ дедупликации.</p>
+
+          <div class="field" style="margin-top:18px">
+            <label for="telegram">Telegram</label>
+            <input id="telegram" name="telegram" type="text" placeholder="@username">
+            <p class="hint">Пригодится, чтобы связать заявку с диалогом в боте.</p>
+          </div>
+
+          <div class="field">
+            <label for="comment">Задача</label>
+            <textarea id="comment" name="comment" placeholder="Нужен Telegram-бот и интеграция с amoCRM"></textarea>
+          </div>
+
+          <button class="btn btn-primary" type="submit" id="submitBtn" style="width:100%">
+            <span id="btnLabel">Отправить заявку</span>
+          </button>
+          <p class="hint" style="margin-top:12px">Это демо-стенд: данные уходят в локальный конвейер и мок CRM.</p>
+        </form>
+
+        <div class="result" id="result" role="status" aria-live="polite">
+          <div class="t" id="resultTitle"></div>
+          <div class="d" id="resultText"></div>
+          <pre id="resultJson"></pre>
+          <div class="after" id="resultActions"></div>
+        </div>
+      </div>
+
+      <div class="aside">
+        <h3>Что произойдёт после нажатия</h3>
+        <ol>
+          <li><b>202 Accepted</b> — заявка записана в журнал и очередь. Ответ не ждёт amoCRM.</li>
+          <li><b>Ключ дедупликации</b> — телефон нормализуется, считается натуральный ключ, повтор отсекается.</li>
+          <li><b>Доставка</b> — воркер создаёт сделку и контакт через <code>POST /api/v4/leads/complex</code>.</li>
+          <li><b>Диалог в боте</b> — BotHelp квалифицирует клиента и возвращает результат в сделку.</li>
+        </ol>
+        <div class="note">
+          <b>Почему 202, а не 200 с готовым ID сделки.</b> Синхронный ответ означал бы, что клиент на сайте
+          ждёт чужой сервис — и видит ошибку, когда у CRM плохой день. Здесь заявка фиксируется сразу,
+          а доставка становится задачей очереди.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Voronka — портфолио-проект: amoCRM + BotHelp + слой надёжности</span>
+    <span><a href="/journal">Журнал событий</a> · <a href="/api/stats">/api/stats</a> · <a href="/health">/health</a></span>
+  </div>
+</footer>
+
+<script>
+(function(){
+  const form = document.getElementById('leadForm');
+  const btn = document.getElementById('submitBtn');
+  const btnLabel = document.getElementById('btnLabel');
+  const box = document.getElementById('result');
+  const title = document.getElementById('resultTitle');
+  const text = document.getElementById('resultText');
+  const json = document.getElementById('resultJson');
+  const actions = document.getElementById('resultActions');
+
+  const ICON = {
+    ok:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5L16 9.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    dup:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5" stroke="currentColor" stroke-width="2"/><path d="M15 5H6a2 2 0 0 0-2 2v9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    bad:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M12 7.5v5.5M12 16.2v.3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>'
+  };
+
+  function setError(id, msg){
+    const el = document.getElementById(id + 'Err');
+    const input = document.getElementById(id);
+    el.innerHTML = msg ? ICON.bad + '<span>' + msg + '</span>' : '';
+    el.classList.toggle('show', !!msg);
+    input.setAttribute('aria-invalid', msg ? 'true' : 'false');
+  }
+
+  function payload(){
+    return {
+      name: form.name.value.trim(),
+      phone: form.phone.value.trim(),
+      email: form.email.value.trim(),
+      telegram: form.telegram.value.trim(),
+      comment: form.comment.value.trim(),
+      form_id: 'landing',
+      utm_source: 'demo'
+    };
+  }
+
+  function validate(p){
+    setError('phone',''); setError('email','');
+    if(!p.phone && !p.email){
+      setError('phone','Укажите телефон или e-mail — без контакта заявку не с чем сопоставить');
+      document.getElementById('phone').focus();
+      return false;
+    }
+    if(p.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(p.email)){
+      setError('email','Проверьте адрес: похоже, в нём опечатка');
+      document.getElementById('email').focus();
+      return false;
+    }
+    if(p.phone && p.phone.replace(/\D/g,'').length < 10){
+      setError('phone','Слишком короткий номер — нужно не меньше 10 цифр');
+      document.getElementById('phone').focus();
+      return false;
+    }
+    return true;
+  }
+
+  function render(status, data){
+    box.className = 'result show ' + (status === 'accepted' ? 'ok' : status === 'duplicate' ? 'dup' : 'bad');
+    const map = {
+      accepted: ['Заявка принята — 202 Accepted', 'Событие записано в журнал и поставлено в очередь на доставку в amoCRM.'],
+      duplicate: ['Это дубль — сделка не создана', 'Ключ уже встречался. В CRM по-прежнему одна сделка на этого человека.'],
+      rejected:  ['Заявка отклонена', 'Не хватает контактных данных для построения ключа.']
+    };
+    const m = map[status] || ['Ошибка', 'Конвейер вернул неожиданный ответ.'];
+    title.innerHTML = (status === 'accepted' ? ICON.ok : status === 'duplicate' ? ICON.dup : ICON.bad) + '<span>' + m[0] + '</span>';
+    text.textContent = m[1];
+    json.textContent = JSON.stringify(data, null, 2);
+
+    actions.innerHTML = '';
+    const again = document.createElement('button');
+    again.type = 'button';
+    again.className = 'btn btn-secondary';
+    again.style.minHeight = '42px';
+    again.textContent = status === 'accepted' ? 'Отправить ещё раз — проверить дедуп' : 'Отправить ещё раз';
+    again.addEventListener('click', function(){ send(); });
+    actions.appendChild(again);
+
+    const link = document.createElement('a');
+    link.className = 'btn btn-secondary';
+    link.style.minHeight = '42px';
+    link.href = '/journal';
+    link.textContent = 'Посмотреть в журнале';
+    actions.appendChild(link);
+  }
+
+  async function send(){
+    const p = payload();
+    if(!validate(p)) return;
+    btn.disabled = true;
+    btnLabel.textContent = 'Отправляем…';
+    try{
+      const res = await fetch('/webhook/form', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(p)
+      });
+      const data = await res.json();
+      render(data.status || 'error', data);
+    }catch(e){
+      box.className = 'result show bad';
+      title.innerHTML = ICON.bad + '<span>Конвейер недоступен</span>';
+      text.textContent = 'Запустите сервис: python -m voronka --port 8080';
+      json.textContent = String(e);
+      actions.innerHTML = '';
+    }finally{
+      btn.disabled = false;
+      btnLabel.textContent = 'Отправить заявку';
+    }
+  }
+
+  form.addEventListener('submit', function(e){ e.preventDefault(); send(); });
+  ['phone','email'].forEach(function(id){
+    document.getElementById(id).addEventListener('blur', function(){
+      const p = payload();
+      if(p.phone || p.email){ setError('phone',''); }
+    });
+  });
+})();
+</script>
+</body>
+</html>

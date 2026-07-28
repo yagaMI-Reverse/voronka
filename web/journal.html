@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voronka — журнал событий</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#0F172A; --navy-2:#1E293B; --slate:#334155; --slate-2:#475569; --slate-3:#64748B;
+  --accent:#0369A1; --accent-hover:#075985; --accent-soft:#E0F2FE;
+  --bg:#F8FAFC; --fg:#020617; --muted:#E8ECF1; --border:#E2E8F0;
+  --danger:#DC2626; --danger-soft:#FEF2F2; --danger-bd:#FECACA;
+  --ok:#047857; --ok-soft:#ECFDF5; --ok-bd:#A7F3D0;
+  --warn:#B45309; --warn-soft:#FFFBEB; --warn-bd:#FDE68A;
+  --info:#1D4ED8; --info-soft:#EFF6FF; --info-bd:#BFDBFE;
+  --radius:12px;
+  --shadow-1:0 1px 2px rgba(2,6,23,.06), 0 1px 3px rgba(2,6,23,.1);
+  --font:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+  --mono:'SFMono-Regular',ui-monospace,Consolas,'Liberation Mono',monospace;
+}
+*{box-sizing:border-box}
+body{margin:0; font-family:var(--font); background:var(--bg); color:var(--fg); font-size:16px; line-height:1.55}
+.wrap{width:100%; max-width:1320px; margin:0 auto; padding:0 24px}
+h1,h2,h3{margin:0; line-height:1.25; letter-spacing:-.02em}
+.num{font-variant-numeric:tabular-nums}
+
+.top{background:var(--navy); border-bottom:1px solid rgba(255,255,255,.08); position:sticky; top:0; z-index:40}
+.top .wrap{display:flex; align-items:center; justify-content:space-between; height:64px; gap:16px}
+.brand{display:flex; align-items:center; gap:10px; color:#fff; font-weight:700; text-decoration:none}
+.top nav{display:flex; gap:4px}
+.top nav a{color:#CBD5E1; text-decoration:none; font-size:.9375rem; font-weight:500; padding:8px 12px; border-radius:8px; transition:background .18s, color .18s}
+.top nav a:hover{background:rgba(255,255,255,.08); color:#fff}
+.top nav a:focus-visible,.brand:focus-visible{outline:2px solid #7DD3FC; outline-offset:2px}
+
+.page-head{padding:32px 0 8px; display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end; justify-content:space-between}
+.page-head h1{font-size:1.625rem; font-weight:700}
+.page-head p{margin:8px 0 0; color:var(--slate-2); font-size:.9375rem; max-width:70ch}
+.controls{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:44px;
+  padding:0 16px; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--navy);
+  font:inherit; font-size:.9375rem; font-weight:600; cursor:pointer;
+  transition:background .18s, border-color .18s, color .18s;
+}
+.btn:hover{background:var(--muted)}
+.btn:focus-visible{outline:3px solid #7DD3FC; outline-offset:2px}
+.btn[disabled]{opacity:.5; cursor:not-allowed}
+.btn-danger{background:var(--danger); border-color:var(--danger); color:#fff}
+.btn-danger:hover{background:#B91C1C}
+.switch{display:inline-flex; align-items:center; gap:9px; min-height:44px; padding:0 14px; background:#fff; border:1px solid var(--border); border-radius:10px; font-size:.9375rem; font-weight:500; cursor:pointer}
+.switch input{width:18px; height:18px; accent-color:var(--accent); cursor:pointer}
+.dot{width:8px; height:8px; border-radius:50%; background:var(--ok); flex:none}
+.dot.off{background:var(--slate-3)}
+
+.tiles{display:grid; grid-template-columns:repeat(6,1fr); gap:14px; margin:24px 0 8px}
+@media (max-width:1100px){ .tiles{grid-template-columns:repeat(3,1fr)} }
+@media (max-width:620px){ .tiles{grid-template-columns:repeat(2,1fr)} }
+.tile{background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:16px; box-shadow:var(--shadow-1)}
+.tile .k{display:flex; align-items:center; gap:7px; font-size:.8125rem; font-weight:600; color:var(--slate-2)}
+.tile .v{margin-top:8px; font-size:1.75rem; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.1}
+.tile .s{margin-top:4px; font-size:.75rem; color:var(--slate-3)}
+.tile.accent{background:var(--navy); border-color:var(--navy)}
+.tile.accent .k{color:#7DD3FC} .tile.accent .v{color:#fff} .tile.accent .s{color:#94A3B8}
+.tile.alert{background:var(--danger-soft); border-color:var(--danger-bd)}
+.tile.alert .v{color:var(--danger)}
+
+.panel{background:#fff; border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow-1); margin:24px 0 40px; overflow:hidden}
+.panel-head{display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--border)}
+.panel-head h2{font-size:1.0625rem; font-weight:700}
+.panel-head .sub{font-size:.8125rem; color:var(--slate-3); margin-top:2px}
+
+.filters{display:flex; gap:6px; flex-wrap:wrap}
+.chip{
+  min-height:36px; padding:0 12px; border-radius:999px; border:1px solid var(--border); background:#fff;
+  font:inherit; font-size:.8125rem; font-weight:600; color:var(--slate); cursor:pointer;
+  display:inline-flex; align-items:center; gap:6px; transition:background .18s, border-color .18s, color .18s;
+}
+.chip:hover{background:var(--muted)}
+.chip:focus-visible{outline:3px solid #7DD3FC; outline-offset:2px}
+.chip[aria-pressed="true"]{background:var(--navy); border-color:var(--navy); color:#fff}
+.chip .c{font-variant-numeric:tabular-nums; opacity:.75}
+
+.table-scroll{overflow-x:auto}
+table{width:100%; border-collapse:collapse; font-size:.875rem; min-width:900px}
+thead th{
+  text-align:left; font-size:.75rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+  color:var(--slate-2); background:#F1F5F9; padding:11px 16px; border-bottom:1px solid var(--border); white-space:nowrap;
+}
+tbody td{padding:12px 16px; border-bottom:1px solid #F1F5F9; vertical-align:top}
+tbody tr:hover{background:#F8FAFC}
+tbody tr:last-child td{border-bottom:none}
+.mono{font-family:var(--mono); font-size:.75rem; color:var(--slate)}
+.ts{white-space:nowrap; font-variant-numeric:tabular-nums; color:var(--slate-2)}
+.detail{color:var(--slate); max-width:52ch}
+
+.badge{
+  display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px;
+  font-size:.75rem; font-weight:700; border:1px solid; white-space:nowrap;
+}
+.b-received{background:var(--info-soft); border-color:var(--info-bd); color:var(--info)}
+.b-delivered{background:var(--ok-soft); border-color:var(--ok-bd); color:var(--ok)}
+.b-duplicate{background:var(--warn-soft); border-color:var(--warn-bd); color:var(--warn)}
+.b-retry{background:var(--warn-soft); border-color:var(--warn-bd); color:var(--warn)}
+.b-dlq{background:var(--danger-soft); border-color:var(--danger-bd); color:var(--danger)}
+.b-rejected{background:var(--danger-soft); border-color:var(--danger-bd); color:var(--danger)}
+.b-requeued{background:var(--accent-soft); border-color:#7DD3FC; color:var(--accent)}
+.b-error{background:var(--danger-soft); border-color:var(--danger-bd); color:var(--danger)}
+
+.empty{padding:56px 24px; text-align:center; color:var(--slate-2)}
+.empty svg{color:#94A3B8}
+.empty p{margin:12px 0 0; font-size:.9375rem}
+.empty code{background:var(--muted); padding:2px 6px; border-radius:5px; font-family:var(--mono); font-size:.8125rem}
+
+.dlq-item{display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid #F1F5F9}
+.dlq-item:last-child{border-bottom:none}
+.dlq-meta{min-width:0}
+.dlq-meta .op{font-weight:700; font-size:.9375rem}
+.dlq-meta .why{margin-top:4px; font-size:.8125rem; color:var(--danger); word-break:break-word; max-width:80ch}
+footer{padding:24px 0 48px; color:var(--slate-3); font-size:.8125rem}
+.sr{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
+@media (prefers-reduced-motion:reduce){ *{transition:none !important; animation:none !important} }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M3 5h18l-6.5 8v6l-5 2v-8L3 5z" stroke="#7DD3FC" stroke-width="1.8" stroke-linejoin="round"/>
+      </svg>
+      Voronka
+    </a>
+    <nav>
+      <a href="/">Лендинг</a>
+      <a href="/api/stats">/api/stats</a>
+      <a href="/health">/health</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="page-head">
+    <div>
+      <h1>Журнал событий</h1>
+      <p>
+        Append-only лента конвейера: что пришло, что отсеклось как дубль, что доставлено в amoCRM,
+        что ушло в ретрай и что лежит в очереди ошибок. Строки не редактируются — UPDATE и DELETE
+        запрещены триггерами в базе.
+      </p>
+    </div>
+    <div class="controls">
+      <label class="switch" for="auto">
+        <input type="checkbox" id="auto" checked>
+        <span class="dot" id="autoDot"></span>
+        Автообновление
+      </label>
+      <button class="btn" id="refresh" type="button">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3 4v5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Обновить
+      </button>
+    </div>
+  </div>
+
+  <section class="tiles" aria-label="Сводка">
+    <div class="tile accent">
+      <div class="k">Уникальных лидов</div>
+      <div class="v num" id="t-unique">—</div>
+      <div class="s">записей в реестре ключей</div>
+    </div>
+    <div class="tile">
+      <div class="k">Принято</div>
+      <div class="v num" id="t-received">—</div>
+      <div class="s">событий на входе</div>
+    </div>
+    <div class="tile">
+      <div class="k">Отсечено дублей</div>
+      <div class="v num" id="t-duplicate">—</div>
+      <div class="s">вторых сделок не создано</div>
+    </div>
+    <div class="tile">
+      <div class="k">Доставлено в CRM</div>
+      <div class="v num" id="t-delivered">—</div>
+      <div class="s">успешных операций</div>
+    </div>
+    <div class="tile">
+      <div class="k">Ретраев</div>
+      <div class="v num" id="t-retry">—</div>
+      <div class="s">повторов с backoff</div>
+    </div>
+    <div class="tile" id="tile-dlq">
+      <div class="k">В очереди ошибок</div>
+      <div class="v num" id="t-dlq">—</div>
+      <div class="s">ждут ручного разбора</div>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="dlqTitle" id="dlqPanel" hidden>
+    <div class="panel-head">
+      <div>
+        <h2 id="dlqTitle">Очередь ошибок (DLQ)</h2>
+        <div class="sub">Задания, исчерпавшие бюджет попыток или получившие неисправимую ошибку</div>
+      </div>
+      <button class="btn btn-danger" id="replayAll" type="button">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3 4v5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Вернуть всё в очередь
+      </button>
+    </div>
+    <div id="dlqList"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="evTitle">
+    <div class="panel-head">
+      <div>
+        <h2 id="evTitle">События</h2>
+        <div class="sub" id="evSub">—</div>
+      </div>
+      <div class="filters" id="filters" role="group" aria-label="Фильтр по типу события"></div>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <caption class="sr">Лента событий конвейера, новые сверху</caption>
+        <thead>
+          <tr>
+            <th scope="col">Время (UTC)</th>
+            <th scope="col">Тип</th>
+            <th scope="col">Источник</th>
+            <th scope="col">Trace</th>
+            <th scope="col">Ключ дедупа</th>
+            <th scope="col">Попытка</th>
+            <th scope="col">Латентность</th>
+            <th scope="col">Детали</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="empty" hidden>
+      <svg width="42" height="42" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <p>Событий пока нет. Отправьте заявку с <a href="/">лендинга</a> или запросом:<br>
+      <code>curl -X POST localhost:8080/webhook/form -H "Content-Type: application/json" -d "{\"phone\":\"+77071234567\"}"</code></p>
+    </div>
+  </section>
+
+  <footer>Обновлено: <span id="stamp" class="num">—</span> · источник: <code>/api/journal</code>, <code>/api/stats</code>, <code>/api/dlq</code></footer>
+</main>
+
+<script>
+(function(){
+  const KINDS = {
+    received:  {label:'принято',   cls:'b-received'},
+    duplicate: {label:'дубль',     cls:'b-duplicate'},
+    delivered: {label:'доставлено',cls:'b-delivered'},
+    retry:     {label:'ретрай',    cls:'b-retry'},
+    dlq:       {label:'DLQ',       cls:'b-dlq'},
+    rejected:  {label:'отклонено', cls:'b-rejected'},
+    requeued:  {label:'возвращено',cls:'b-requeued'},
+    error:     {label:'ошибка',    cls:'b-error'}
+  };
+  const ICONS = {
+    received:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M6 13l6 6 6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    duplicate:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="11" height="11" rx="2.5" stroke="currentColor" stroke-width="2.2"/><path d="M15 5H6a2 2 0 0 0-2 2v9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+    delivered:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M4 12.5l5 5L20 6.5" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    retry:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M3 12a9 9 0 1 0 3-6.7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M3 4v5h5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    dlq:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 8v5M12 16.5v.3" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M10.3 3.9L2.6 17.4A2 2 0 0 0 4.3 20.4h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></svg>',
+    rejected:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2.2"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+    requeued:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M4 9h13a4 4 0 0 1 0 8H9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 5L4 9l4 4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    error:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2.2"/><path d="M12 7.5V13M12 16.4v.3" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>'
+  };
+
+  let filter = null;
+  let timer = null;
+
+  const $ = function(id){ return document.getElementById(id); };
+  const esc = function(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  }); };
+
+  function badge(kind){
+    const k = KINDS[kind] || {label:kind, cls:'b-received'};
+    return '<span class="badge ' + k.cls + '">' + (ICONS[kind] || '') + esc(k.label) + '</span>';
+  }
+
+  function time(ts){
+    if(!ts) return '—';
+    return esc(String(ts).replace('T',' ').replace('+00:00','').slice(0,23));
+  }
+
+  async function load(){
+    let stats, events, dlq;
+    try{
+      const r = await Promise.all([
+        fetch('/api/stats').then(function(r){return r.json()}),
+        fetch('/api/journal?limit=200' + (filter ? '&kind=' + encodeURIComponent(filter) : '')).then(function(r){return r.json()}),
+        fetch('/api/dlq').then(function(r){return r.json()})
+      ]);
+      stats = r[0]; events = r[1].events || []; dlq = r[2].tasks || [];
+    }catch(e){
+      $('evSub').textContent = 'Сервис недоступен — запустите: python -m voronka --port 8080';
+      return;
+    }
+
+    const j = stats.journal || {};
+    $('t-unique').textContent = stats.unique_leads || 0;
+    $('t-received').textContent = j.received || 0;
+    $('t-duplicate').textContent = j.duplicate || 0;
+    $('t-delivered').textContent = j.delivered || 0;
+    $('t-retry').textContent = j.retry || 0;
+    const dlqCount = (stats.queue || {}).dlq || 0;
+    $('t-dlq').textContent = dlqCount;
+    $('tile-dlq').className = 'tile' + (dlqCount ? ' alert' : '');
+
+    // фильтры
+    const box = $('filters');
+    const order = ['received','duplicate','delivered','retry','dlq','rejected','requeued'];
+    let html = '<button class="chip" type="button" data-k="" aria-pressed="' + (filter ? 'false':'true') + '">все <span class="c">' +
+               Object.keys(j).reduce(function(a,k){return a + j[k]}, 0) + '</span></button>';
+    order.forEach(function(k){
+      if(!j[k]) return;
+      html += '<button class="chip" type="button" data-k="' + k + '" aria-pressed="' + (filter === k ? 'true':'false') + '">' +
+              esc((KINDS[k]||{}).label || k) + ' <span class="c">' + j[k] + '</span></button>';
+    });
+    box.innerHTML = html;
+    Array.prototype.forEach.call(box.querySelectorAll('.chip'), function(btn){
+      btn.addEventListener('click', function(){ filter = btn.dataset.k || null; load(); });
+    });
+
+    // таблица
+    $('rows').innerHTML = events.map(function(e){
+      return '<tr>' +
+        '<td class="ts">' + time(e.ts) + '</td>' +
+        '<td>' + badge(e.kind) + '</td>' +
+        '<td>' + esc(e.source) + '</td>' +
+        '<td class="mono">' + esc(e.trace_id) + '</td>' +
+        '<td class="mono">' + (e.dedup_key ? esc(String(e.dedup_key).slice(0,12)) + '…' : '—') + '</td>' +
+        '<td class="num">' + (e.attempt || '—') + '</td>' +
+        '<td class="num">' + (e.latency_ms != null ? e.latency_ms + ' мс' : '—') + '</td>' +
+        '<td class="detail">' + esc(e.detail || '') + '</td>' +
+      '</tr>';
+    }).join('');
+    $('empty').hidden = events.length > 0;
+    $('evSub').textContent = events.length
+      ? 'показано ' + events.length + (filter ? ' событий типа «' + ((KINDS[filter]||{}).label || filter) + '»' : ' последних событий, новые сверху')
+      : 'пока пусто';
+
+    // DLQ
+    $('dlqPanel').hidden = dlq.length === 0;
+    $('dlqList').innerHTML = dlq.map(function(t){
+      return '<div class="dlq-item">' +
+        '<div class="dlq-meta">' +
+          '<div class="op">' + esc(t.op) + ' · попыток: ' + esc(t.attempts) + '</div>' +
+          '<div class="why">' + esc(t.last_error || 'без описания') + '</div>' +
+          '<div class="mono" style="margin-top:4px">trace ' + esc(t.trace_id) + ' · ключ ' + esc(String(t.dedup_key).slice(0,12)) + '…</div>' +
+        '</div>' +
+        '<button class="btn" type="button" data-id="' + esc(t.id) + '">Вернуть в очередь</button>' +
+      '</div>';
+    }).join('');
+    Array.prototype.forEach.call($('dlqList').querySelectorAll('button[data-id]'), function(btn){
+      btn.addEventListener('click', function(){ replay(Number(btn.dataset.id), btn); });
+    });
+
+    $('stamp').textContent = new Date().toLocaleTimeString('ru-RU');
+  }
+
+  async function replay(id, btn){
+    const many = id == null;
+    const msg = many
+      ? 'Вернуть в очередь все задания из DLQ? Они будут повторно отправлены в amoCRM.'
+      : 'Вернуть задание #' + id + ' в очередь? Оно будет повторно отправлено в amoCRM.';
+    if(!confirm(msg)) return;
+    if(btn){ btn.disabled = true; btn.textContent = 'Возвращаем…'; }
+    try{
+      await fetch('/api/dlq/replay', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(many ? {} : {id:id})
+      });
+    }finally{
+      setTimeout(load, 400);
+    }
+  }
+
+  $('replayAll').addEventListener('click', function(){ replay(null, $('replayAll')); });
+  $('refresh').addEventListener('click', load);
+  $('auto').addEventListener('change', function(){
+    $('autoDot').className = 'dot' + (this.checked ? '' : ' off');
+    schedule();
+  });
+
+  function schedule(){
+    if(timer) clearInterval(timer);
+    if($('auto').checked) timer = setInterval(load, 3000);
+  }
+
+  load();
+  schedule();
+})();
+</script>
+</body>
+</html>
